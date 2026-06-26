@@ -1,0 +1,198 @@
+.assistant-message {
+  flex: 1;
+  min-width: 0;
+  max-width: calc(100% - 2.75rem);
+}
+
+.bubble-row.bubble-assistant {
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+.bubble-assistant {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.assistant-paragraph {
+  margin: 0 0 0.75rem;
+}
+
+.assistant-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.assistant-line {
+  display: inline;
+}
+
+.inline-link {
+  color: #a5b4fc;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.inline-link:hover {
+  color: #c7d2fe;
+}
+
+.citation-wrap {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 0.15rem;
+}
+
+.citation-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  background: #4338ca;
+  color: #eef2ff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.citation-mark:hover {
+  background: #6366f1;
+  color: #fff;
+}
+
+.citation-wrap:hover .citation-tooltip,
+.citation-wrap:focus-within .citation-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.citation-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%) translateY(4px);
+  min-width: 220px;
+  max-width: min(320px, 80vw);
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  background: #18181b;
+  border: 1px solid #3f3f46;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
+  z-index: 20;
+}
+
+.citation-tooltip-title {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #f4f4f5;
+  margin-bottom: 0.35rem;
+}
+
+.citation-tooltip-link {
+  display: block;
+  font-size: 0.72rem;
+  color: #a5b4fc;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-decoration: none;
+}
+
+.citation-tooltip-link:hover {
+  text-decoration: underline;
+}
+
+.sources-panel {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #27272a;
+}
+
+.sources-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  color: #d4d4d8;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sources-toggle:hover {
+  border-color: #6366f1;
+  color: #e4e4e7;
+}
+
+.sources-chevron {
+  display: inline-block;
+  transition: transform 0.15s;
+}
+
+.sources-chevron.open {
+  transform: rotate(180deg);
+}
+
+.sources-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.sources-list li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  padding: 0.35rem 0;
+  font-size: 0.85rem;
+}
+
+.sources-index {
+  color: #818cf8;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sources-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  min-width: 0;
+}
+
+.sources-title {
+  color: #e4e4e7;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.sources-title:hover {
+  color: #c7d2fe;
+  text-decoration: underline;
+}
+
+.sources-url {
+  color: #a5b4fc;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-size: 0.78rem;
+}
+
+.sources-url:hover {
+  text-decoration: underline;
+}

@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 OAUTH_SESSION_KEY = "oauth"
 PENDING_SESSION_KEY = "oauth_pending"
+MCP_URL_SESSION_KEY = "glean_mcp_url"
 
 
 def _session_id(request: Request) -> str:
@@ -32,6 +33,10 @@ def _session_id(request: Request) -> str:
     if "sid" not in session:
         session["sid"] = secrets.token_urlsafe(16)
     return session["sid"]
+
+
+def _get_mcp_url(request: Request) -> str:
+    return (request.session.get(MCP_URL_SESSION_KEY) or settings.glean_mcp_url or "").rstrip("/")
 
 
 def _get_tokens(request: Request) -> OAuthTokens | None:
@@ -77,23 +82,52 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
 
 
+class ConfigRequest(BaseModel):
+    glean_mcp_url: str
+
+
+@app.get("/api/config")
+async def get_config(request: Request) -> dict[str, str | None]:
+    url = _get_mcp_url(request)
+    return {"glean_mcp_url": url or None}
+
+
+@app.post("/api/config")
+async def set_config(req: ConfigRequest, request: Request) -> dict[str, str]:
+    url = req.glean_mcp_url.strip().rstrip("/")
+    if not url:
+        raise HTTPException(status_code=400, detail="Glean MCP URL is required")
+    if not url.startswith("http://") and not url.startswith("https://"):
+        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
+
+    previous = request.session.get(MCP_URL_SESSION_KEY)
+    if previous != url:
+        await session_mcp.remove(_session_id(request))
+        request.session.pop(OAUTH_SESSION_KEY, None)
+
+    request.session[MCP_URL_SESSION_KEY] = url
+    return {"glean_mcp_url": url}
+
+
 @app.get("/api/health")
 async def health(request: Request) -> dict[str, Any]:
+    mcp_url = _get_mcp_url(request)
     tokens = _get_tokens(request)
     authenticated = bool(tokens and tokens.is_valid()) or bool(settings.glean_mcp_token)
     mcp_status: dict[str, Any] = {"connected": False, "tool_count": 0, "primary_tool": None}
 
-    if authenticated:
+    if mcp_url and authenticated:
         try:
             access = settings.glean_mcp_token or (tokens.access_token if tokens else "")
-            client = await session_mcp.get(_session_id(request), access)
+            client = await session_mcp.get(_session_id(request), access, mcp_url)
             mcp_status = client.status()
         except Exception:
             logger.exception("MCP health check failed")
 
     return {
         "status": "ok",
-        "mcp_configured": bool(settings.glean_mcp_url),
+        "mcp_configured": bool(mcp_url),
+        "glean_mcp_url": mcp_url or None,
         "authenticated": authenticated,
         "auth_mode": "token" if settings.glean_mcp_token else "oauth",
         "mcp": mcp_status,
@@ -105,8 +139,12 @@ async def auth_login(request: Request):
     if settings.glean_mcp_token:
         return RedirectResponse(url=settings.frontend_url)
 
+    mcp_url = _get_mcp_url(request)
+    if not mcp_url:
+        raise HTTPException(status_code=400, detail="Set Glean MCP URL first")
+
     try:
-        authorize_url, pending = await start_login()
+        authorize_url, pending = await start_login(mcp_url)
     except Exception as exc:
         logger.exception("OAuth login start failed")
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -128,6 +166,10 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing code or state")
 
+    mcp_url = _get_mcp_url(request)
+    if not mcp_url:
+        return RedirectResponse(url=f"{settings.frontend_url}?auth_error=mcp_url_missing")
+
     pending_raw = request.session.pop(PENDING_SESSION_KEY, None)
     if not pending_raw or pending_raw.get("state") != state:
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
@@ -140,8 +182,8 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
     )
 
     try:
-        tokens = await finish_login(code, pending)
-    except Exception as exc:
+        tokens = await finish_login(code, pending, mcp_url)
+    except Exception:
         logger.exception("OAuth token exchange failed")
         return RedirectResponse(url=f"{settings.frontend_url}?auth_error=token_exchange_failed")
 
@@ -153,27 +195,31 @@ async def auth_callback(request: Request, code: str | None = None, state: str | 
 async def auth_logout(request: Request) -> dict[str, str]:
     sid = _session_id(request)
     await session_mcp.remove(sid)
-    request.session.clear()
+    request.session.pop(OAUTH_SESSION_KEY, None)
     return {"status": "ok"}
 
 
 async def _resolve_mcp_client(request: Request):
+    mcp_url = _get_mcp_url(request)
+    if not mcp_url:
+        raise HTTPException(status_code=400, detail="Set Glean MCP URL first")
+
     if settings.glean_mcp_token:
-        return await session_mcp.get(_session_id(request), settings.glean_mcp_token)
+        return await session_mcp.get(_session_id(request), settings.glean_mcp_token, mcp_url)
 
     tokens = _get_tokens(request)
-    tokens = await ensure_valid_token(tokens)
+    tokens = await ensure_valid_token(tokens, mcp_url)
     if not tokens:
         raise HTTPException(status_code=401, detail="Not signed in. Visit /api/auth/login.")
 
     _set_tokens(request, tokens)
-    return await session_mcp.get(_session_id(request), tokens.access_token)
+    return await session_mcp.get(_session_id(request), tokens.access_token, mcp_url)
 
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest, request: Request) -> EventSourceResponse:
-    if not settings.glean_mcp_url:
-        raise HTTPException(status_code=503, detail="GLEAN_MCP_URL not configured.")
+    if not _get_mcp_url(request):
+        raise HTTPException(status_code=400, detail="Set Glean MCP URL first")
 
     try:
         mcp_client = await _resolve_mcp_client(request)

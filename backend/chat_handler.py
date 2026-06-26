@@ -7,11 +7,26 @@ from typing import Any, AsyncIterator
 
 from mcp_client import GleanMcpClient
 
-_METADATA_SPLIT = re.compile(r"\n---\n")
+_FOOTNOTE_DEF = re.compile(r"^\[\^(\d+)\]:\s*\[([^\]]*)\]\(([^)]+)\)\s*$", re.MULTILINE)
+_CHAT_METADATA = re.compile(r"\n---\nchatId:.*", re.DOTALL)
+_FOLLOWUP_BLOCK = re.compile(
+    r"\n---\n(?!chatId:)(.+?)(?=\n\[\^\d+\]:|\n---\nchatId:|$)",
+    re.DOTALL,
+)
 
 
-def _clean_response(text: str) -> str:
-    return _METADATA_SPLIT.split(text, maxsplit=1)[0].strip()
+def _parse_response(text: str) -> tuple[str, list[dict[str, str]]]:
+    citations: list[dict[str, str]] = []
+    for match in _FOOTNOTE_DEF.finditer(text):
+        citations.append(
+            {"id": match.group(1), "title": match.group(2).strip(), "url": match.group(3).strip()}
+        )
+
+    body = _CHAT_METADATA.sub("", text)
+    body = _FOOTNOTE_DEF.sub("", body)
+    body = _FOLLOWUP_BLOCK.sub("", body)
+    body = re.sub(r"\n{3,}", "\n\n", body).strip()
+    return body, citations
 
 
 def _build_chat_args(tool_name: str, user_message: str, history: list[dict[str, str]]) -> dict[str, Any]:
@@ -54,11 +69,16 @@ async def handle_chat(
     yield {"type": "tool_call", "name": tool_name, "arguments": args}
 
     try:
-        result = await mcp.call_tool(tool_name, args)
+        tool_result = await mcp.call_tool(tool_name, args)
     except Exception as exc:
         yield {"type": "error", "content": f"MCP tool failed: {exc}"}
         return
 
-    yield {"type": "tool_result", "name": tool_name, "content": result[:4000]}
-    answer = _clean_response(result)
-    yield {"type": "text", "content": answer}
+    yield {
+        "type": "tool_result",
+        "name": tool_name,
+        "content": tool_result.text,
+        "raw": tool_result.raw,
+    }
+    answer, citations = _parse_response(tool_result.text)
+    yield {"type": "text", "content": answer, "citations": citations}

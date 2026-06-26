@@ -1,0 +1,89 @@
+.home-app {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+  background: #0f0f12;
+}
+
+.home-card {
+  width: 100%;
+  max-width: 480px;
+  padding: 2.5rem 2rem;
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 20px;
+  text-align: center;
+}
+
+.home-card h1 {
+  margin: 1rem 0 0.5rem;
+  font-size: 1.5rem;
+  color: #f4f4f5;
+}
+
+.home-subtitle {
+  margin: 0 0 1.5rem;
+  color: #a1a1aa;
+  line-height: 1.5;
+}
+
+.home-label {
+  display: block;
+  text-align: left;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #d4d4d8;
+  margin-bottom: 0.4rem;
+}
+
+.home-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  border-radius: 12px;
+  color: #f4f4f5;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.home-input:focus {
+  border-color: #6366f1;
+}
+
+.home-hint {
+  margin: 0.5rem 0 1.25rem;
+  text-align: left;
+  font-size: 0.75rem;
+  color: #71717a;
+}
+
+.home-error {
+  margin: 0 0 1rem;
+  color: #f87171;
+  font-size: 0.85rem;
+}
+
+.home-btn {
+  width: 100%;
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.home-btn:hover:not(:disabled) {
+  background: #4f46e5;
+}
+
+.home-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -1,6 +1,25 @@
 # MCP Chatbot
 
-A chat UI that looks like a normal assistant but always answers by calling Glean MCP on the backend. No Glean SDK in the browser, no LLM deciding whether to search — every question goes straight to Glean's `chat` tool.
+A chat UI that looks like a normal assistant but always answers by calling Glean MCP on the backend. No Glean SDK in the browser, no LLM — every question goes straight to Glean's `chat` tool.
+
+![Trading desk dashboard with Glean Assistant chat](docs/screenshot.png)
+
+## Running it
+
+```bash
+cd backend && python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # only SESSION_SECRET required
+python main.py
+```
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+Open http://localhost:5174 → paste your **Glean MCP URL** on the home page → **Continue to chat** → **Sign in** → ask something.
+
+Your MCP URL comes from Glean Admin → Platform → Glean MCP server (e.g. `https://your-tenant-be.glean.com/mcp/default`). No need to put it in `.env`.
 
 ```
 ┌─────────────┐     SSE      ┌──────────────┐    MCP/HTTP    ┌─────────────────┐
@@ -15,7 +34,7 @@ I wanted the simplest possible demo of "chatbot UI → MCP tool call" without wi
 
 | Piece            | What it does                                                    |
 | ---------------- | --------------------------------------------------------------- |
-| React frontend   | Generic assistant UI — sign in, type a message, read the reply |
+| React frontend   | Home page for MCP URL, chat UI, sign in, read the reply         |
 | FastAPI backend  | OAuth, session management, MCP connection, tool calls           |
 | Glean MCP        | Actually answers the question via the `chat` tool               |
 
@@ -38,13 +57,15 @@ No agent loop, no tool selection. The backend always calls `chat` (falls back to
 
 ### No LLM in the loop
 
-This is intentionally dumber than [vertex-mcp-chat](../vertex-mcp-chat). There's no Vertex endpoint, no model deciding *when* to call tools. Glean Assistant *is* the answer — we're just wrapping it in a chat UI.
+This is intentionally dumber than [vertex-mcp-chat](../vertex-mcp-chat). Glean Assistant *is* the answer — we're just wrapping it in a chat UI. One user message → one MCP tool call → one reply.
 
-That makes the demo easier to reason about: one user message → one MCP tool call → one reply.
+### MCP URL on the home page
+
+The Glean MCP URL is stored per session via the web UI, not hardcoded in `.env`. Click **Home** (top right) anytime to change it. Changing the URL clears your OAuth session so you can sign in against a different instance.
 
 ### MCP stays in the backend
 
-Glean MCP is HTTP, not stdio. The browser shouldn't hold OAuth tokens or know the MCP server URL.
+Glean MCP is HTTP, not stdio. The browser shouldn't hold OAuth tokens or speak MCP directly.
 
 | Concern      | Approach                                                         |
 | ------------ | ---------------------------------------------------------------- |
@@ -55,24 +76,13 @@ Glean MCP is HTTP, not stdio. The browser shouldn't hold OAuth tokens or know th
 
 ### OAuth instead of a static API token
 
-Hardcoding `GLEAN_MCP_TOKEN` in `.env` works for quick testing, but it's not how a real app should authenticate. Users should sign in with their own Glean account so MCP calls inherit their permissions.
+Users sign in with their own Glean account so MCP calls inherit their permissions. The flow uses Dynamic Client Registration + PKCE — standard MCP OAuth.
 
-The flow follows the standard MCP OAuth pattern:
-
-1. Probe the MCP URL → get a 401 → discover OAuth metadata (RFC 9728 protected-resource metadata → authorization server)
-2. **Dynamic Client Registration** — register this app as an OAuth client on first login (redirect URI: `http://localhost:8001/api/auth/callback`)
-3. **PKCE** — redirect the user to Glean login, exchange the code for access + refresh tokens
-4. Store tokens in a signed session cookie; refresh automatically when they expire
-
-Set `GLEAN_MCP_TOKEN` in `.env` to skip OAuth entirely — useful for headless testing, not for production.
-
-### Generic frontend
-
-The UI says "Assistant", not "Glean". No Web SDK, no embedded search widget. It's meant to look like any other chatbot while Glean does the work behind the scenes.
+Set `GLEAN_MCP_TOKEN` in `.env` to skip OAuth entirely (headless testing only).
 
 ### Streaming
 
-SSE, not WebSockets — the stream is one-directional (server → browser) and works through Vite's dev proxy without extra config. The only events the UI cares about are `status`, `text`, and `error`.
+SSE, not WebSockets — one-directional server → browser, works through Vite's dev proxy. Events: `status`, `text`, `error`.
 
 ## Repo layout
 
@@ -82,32 +92,17 @@ SSE, not WebSockets — the stream is one-directional (server → browser) and w
 | `backend/oauth_service.py`           | DCR, PKCE, token exchange and refresh        |
 | `backend/mcp_client.py`              | Glean MCP connection with user's bearer token |
 | `backend/chat_handler.py`            | Always calls `chat` (or `search`) each turn  |
-| `backend/session_mcp.py`             | Per-session MCP connection cache             |
+| `frontend/src/components/Home.tsx`   | MCP URL input                                |
 | `frontend/src/components/Chat.tsx`   | Chat UI + sign-in gate                       |
 
-## Config
+## Config (`backend/.env`)
 
-### Runtime (`backend/.env`)
+Optional — defaults work for local dev.
 
 | Variable             | What it's for                                                         |
 | -------------------- | --------------------------------------------------------------------- |
-| `GLEAN_MCP_URL`      | Glean MCP server URL (tenant-be.glean.com/mcp/path)                   |
-| `SESSION_SECRET`     | Signs session cookies — use a random string                           |
-| `FRONTEND_URL`       | Post-OAuth redirect (default http://localhost:5174)                   |
-| `OAUTH_REDIRECT_URI` | Backend callback (default http://localhost:8001/api/auth/callback)    |
-| `GLEAN_MCP_TOKEN`    | Optional dev bypass — leave empty for OAuth                           |
-| `MCP_TOOL`           | Tool called each turn (default chat)                                  |
-
-## Running it
-
-**Prerequisites:** Glean MCP enabled in admin, DCR allowed for your instance.
-
-| Step | Command                                                              |
-| ---- | -------------------------------------------------------------------- |
-| 1    | cd backend && python -m venv .venv && source .venv/bin/activate      |
-| 2    | pip install -r requirements.txt                                      |
-| 3    | cp .env.example .env — set GLEAN_MCP_URL and SESSION_SECRET          |
-| 4    | python main.py                                                       |
-| 5    | cd frontend && npm install && npm run dev (separate terminal)        |
-
-Open http://localhost:5174, click **Sign in**, and ask something.
+| `SESSION_SECRET`     | Signs session cookies (set this in `.env`)                            |
+| `GLEAN_MCP_URL`      | Optional fallback URL — normally set via the home page                  |
+| `GLEAN_MCP_TOKEN`    | Optional dev bypass — skip OAuth                                      |
+| `FRONTEND_URL`       | Post-OAuth redirect (default `http://localhost:5174`)                 |
+| `OAUTH_REDIRECT_URI` | Backend callback (default `http://localhost:8001/api/auth/callback`)  |

@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import AssistantMessage, { extractCitations, type Citation } from "./AssistantMessage";
+import BrandIcon from "./BrandIcon";
+import ToolBlock from "./ToolBlock";
 import "./Chat.css";
 
 interface Message {
-  role: "user" | "assistant" | "status";
+  role: "user" | "assistant" | "tool";
   content: string;
+  toolLabel?: string;
+  citations?: Citation[];
 }
 
 interface Health {
   status: string;
   mcp_configured: boolean;
+  glean_mcp_url: string | null;
   authenticated: boolean;
   auth_mode: "oauth" | "token";
   mcp: {
@@ -17,15 +23,20 @@ interface Health {
   };
 }
 
-const fetchOpts: RequestInit = { credentials: "include" };
+interface ChatProps {
+  onHome: () => void;
+}
 
-export default function Chat() {
+export default function Chat({ onHome }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const lastRawTextRef = useRef("");
+
+  const fetchOpts: RequestInit = { credentials: "include" };
 
   const loadHealth = useCallback(() => {
     fetch("/api/health", fetchOpts)
@@ -52,18 +63,13 @@ export default function Chat() {
     window.location.href = "/api/auth/login";
   };
 
-  const signOut = async () => {
-    await fetch("/api/auth/logout", { method: "POST", ...fetchOpts });
-    setMessages([]);
-    loadHealth();
-  };
-
   const send = useCallback(async () => {
     const text = input.trim();
     if (!text || loading || !ready) return;
 
     const userMsg: Message = { role: "user", content: text };
-    const history = [...messages.filter((m) => m.role !== "status"), userMsg];
+    const chatHistory = messages.filter((m) => m.role === "user" || m.role === "assistant");
+    const history = [...chatHistory, userMsg];
     setMessages(history);
     setInput("");
     setLoading(true);
@@ -111,6 +117,30 @@ export default function Chat() {
 
           if (payload.type === "status") {
             setStatusText(payload.content);
+          } else if (payload.type === "tool_call") {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "tool",
+                toolLabel: `MCP Request → ${payload.name}`,
+                content: JSON.stringify(payload.arguments, null, 2),
+              },
+            ]);
+          } else if (payload.type === "tool_result") {
+            const rawText =
+              payload.raw?.content?.[0]?.text ??
+              (typeof payload.content === "string" ? payload.content : "");
+            if (rawText) {
+              lastRawTextRef.current = rawText;
+            }
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "tool",
+                toolLabel: `MCP Response ← ${payload.name}`,
+                content: JSON.stringify(payload.raw ?? payload.content, null, 2),
+              },
+            ]);
           } else if (payload.type === "text") {
             setStatusText(null);
             setMessages((prev) => {
@@ -118,6 +148,10 @@ export default function Chat() {
               next[assistantIdx] = {
                 role: "assistant",
                 content: payload.content,
+                citations:
+                  payload.citations?.length > 0
+                    ? payload.citations
+                    : extractCitations(lastRawTextRef.current),
               };
               return next;
             });
@@ -150,11 +184,26 @@ export default function Chat() {
     }
   }, [input, loading, messages, ready, loadHealth]);
 
+  if (health && !health.mcp_configured) {
+    return (
+      <div className="chat-app chat-gate">
+        <div className="login-card">
+          <BrandIcon size="large" />
+          <h1>Assistant</h1>
+          <p>Set your Glean MCP URL before chatting.</p>
+          <button type="button" className="login-btn" onClick={onHome}>
+            Go to home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (health && !health.authenticated && health.auth_mode === "oauth") {
     return (
-      <div className="chat-app login-screen">
+      <div className="chat-app chat-gate">
         <div className="login-card">
-          <span className="brand-icon large">✦</span>
+          <BrandIcon size="large" />
           <h1>Assistant</h1>
           <p>Sign in with your company account to search your organization&apos;s knowledge base.</p>
           <button type="button" className="login-btn" onClick={signIn}>
@@ -169,18 +218,16 @@ export default function Chat() {
     <div className="chat-app">
       <header className="chat-header">
         <div className="brand">
-          <span className="brand-icon">✦</span>
+          <BrandIcon />
           <div>
             <h1>Assistant</h1>
             <p className="subtitle">Ask me anything about your company</p>
           </div>
         </div>
         <div className="header-actions">
-          {health?.auth_mode === "oauth" && health.authenticated && (
-            <button type="button" className="sign-out-btn" onClick={signOut}>
-              Sign out
-            </button>
-          )}
+          <button type="button" className="home-btn" onClick={onHome}>
+            Home
+          </button>
           {health && !ready && (
             <span className="offline-badge">Connecting...</span>
           )}
@@ -219,9 +266,17 @@ export default function Chat() {
             {m.role === "assistant" && (
               <div className="avatar">A</div>
             )}
-            <div className={`bubble bubble-${m.role}`}>
-              {m.content || (loading && i === messages.length - 1 ? "..." : "")}
-            </div>
+            {m.role === "tool" ? (
+              <ToolBlock label={m.toolLabel ?? "MCP"} content={m.content} />
+            ) : m.role === "assistant" ? (
+              <AssistantMessage
+                content={m.content}
+                citations={m.citations}
+                loading={loading && i === messages.length - 1}
+              />
+            ) : (
+              <div className={`bubble bubble-${m.role}`}>{m.content}</div>
+            )}
           </div>
         ))}
 

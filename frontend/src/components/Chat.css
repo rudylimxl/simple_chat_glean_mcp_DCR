@@ -1,9 +1,10 @@
 .chat-app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  max-width: 820px;
-  margin: 0 auto;
+  height: 100%;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .chat-header {
@@ -21,13 +22,17 @@
 }
 
 .brand-icon {
-  display: grid;
-  place-items: center;
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  font-size: 1.1rem;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.brand-icon-large {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
 }
 
 .brand h1 {
@@ -57,7 +62,8 @@
   gap: 0.5rem;
 }
 
-.sign-out-btn {
+.sign-out-btn,
+.home-btn {
   background: transparent;
   border: 1px solid #3f3f46;
   color: #a1a1aa;
@@ -67,14 +73,23 @@
   cursor: pointer;
 }
 
-.sign-out-btn:hover {
+.sign-out-btn:hover,
+.home-btn:hover {
   border-color: #52525b;
   color: #e4e4e7;
 }
 
-.login-screen {
+.login-screen,
+.chat-gate {
   align-items: center;
   justify-content: center;
+  padding: 1rem;
+}
+
+.chat-gate .login-card {
+  width: 100%;
+  max-width: 300px;
+  padding: 1.5rem;
 }
 
 .login-card {
@@ -95,13 +110,6 @@
   color: #a1a1aa;
   line-height: 1.5;
   margin: 0 0 1.5rem;
-}
-
-.brand-icon.large {
-  width: 56px;
-  height: 56px;
-  font-size: 1.5rem;
-  display: inline-grid;
 }
 
 .login-btn {
@@ -196,23 +204,34 @@
 }
 
 .bubble {
-  max-width: 85%;
   line-height: 1.6;
-  white-space: pre-wrap;
   font-size: 0.95rem;
+}
+
+.bubble-user {
+  max-width: 85%;
+  white-space: pre-wrap;
 }
 
 .bubble-user .bubble {
   background: #27272a;
   padding: 0.75rem 1rem;
   border-radius: 18px 18px 4px 18px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
-.bubble-assistant .bubble {
+.bubble-assistant.bubble {
   background: #18181b;
   border: 1px solid #27272a;
   padding: 0.75rem 1rem;
   border-radius: 4px 18px 18px 18px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.bubble-row.bubble-tool {
+  margin-bottom: 0.5rem;
 }
 
 .status-line {

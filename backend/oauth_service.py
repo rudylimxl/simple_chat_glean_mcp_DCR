@@ -208,8 +208,8 @@ def build_authorize_url(
     return f"{metadata['authorization_endpoint']}?{urlencode(params)}"
 
 
-async def start_login() -> tuple[str, PendingAuth]:
-    metadata, resource = await discover_oauth_metadata(settings.glean_mcp_url)
+async def start_login(mcp_url: str) -> tuple[str, PendingAuth]:
+    metadata, resource = await discover_oauth_metadata(mcp_url)
     client_id = await ensure_client_registration(metadata)
     code_verifier, code_challenge = generate_pkce()
     state = secrets.token_urlsafe(32)
@@ -224,8 +224,8 @@ async def start_login() -> tuple[str, PendingAuth]:
     return url, pending
 
 
-async def finish_login(code: str, pending: PendingAuth) -> OAuthTokens:
-    metadata, _ = await discover_oauth_metadata(settings.glean_mcp_url)
+async def finish_login(code: str, pending: PendingAuth, mcp_url: str) -> OAuthTokens:
+    metadata, _ = await discover_oauth_metadata(mcp_url)
     payload = {
         "grant_type": "authorization_code",
         "code": code,
@@ -251,11 +251,11 @@ async def finish_login(code: str, pending: PendingAuth) -> OAuthTokens:
     )
 
 
-async def refresh_tokens(tokens: OAuthTokens) -> OAuthTokens:
+async def refresh_tokens(tokens: OAuthTokens, mcp_url: str) -> OAuthTokens:
     if not tokens.refresh_token:
         raise RuntimeError("No refresh token available")
 
-    metadata, _ = await discover_oauth_metadata(settings.glean_mcp_url)
+    metadata, _ = await discover_oauth_metadata(mcp_url)
     payload = {
         "grant_type": "refresh_token",
         "refresh_token": tokens.refresh_token,
@@ -279,11 +279,11 @@ async def refresh_tokens(tokens: OAuthTokens) -> OAuthTokens:
     )
 
 
-async def ensure_valid_token(tokens: OAuthTokens | None) -> OAuthTokens | None:
+async def ensure_valid_token(tokens: OAuthTokens | None, mcp_url: str) -> OAuthTokens | None:
     if tokens is None:
         return None
     if tokens.is_valid():
         return tokens
     if tokens.refresh_token:
-        return await refresh_tokens(tokens)
+        return await refresh_tokens(tokens, mcp_url)
     return None

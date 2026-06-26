@@ -2,27 +2,28 @@
 
 from __future__ import annotations
 
-import logging
-
 from mcp_client import GleanMcpClient
-
-logger = logging.getLogger(__name__)
 
 
 class SessionMcpRegistry:
     def __init__(self) -> None:
         self._clients: dict[str, GleanMcpClient] = {}
 
-    async def get(self, session_id: str, access_token: str) -> GleanMcpClient:
+    async def get(self, session_id: str, access_token: str, mcp_url: str) -> GleanMcpClient:
         existing = self._clients.get(session_id)
-        if existing and existing.has_token(access_token) and existing.is_connected():
+        if (
+            existing
+            and existing.has_token(access_token)
+            and existing.has_mcp_url(mcp_url)
+            and existing.is_connected()
+        ):
             return existing
 
         if existing:
             await existing.disconnect()
 
         client = GleanMcpClient()
-        await client.connect(access_token=access_token)
+        await client.connect(access_token=access_token, mcp_url=mcp_url)
         self._clients[session_id] = client
         return client
 

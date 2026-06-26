@@ -23,6 +23,12 @@ class ToolInfo:
     input_schema: dict[str, Any]
 
 
+@dataclass
+class ToolCallResult:
+    text: str
+    raw: dict[str, Any]
+
+
 class GleanMcpClient:
     def __init__(self) -> None:
         self._stack = AsyncExitStack()
@@ -30,25 +36,30 @@ class GleanMcpClient:
         self._tools: list[ToolInfo] = []
         self._connected = False
         self._access_token: str | None = None
+        self._mcp_url: str | None = None
 
     def has_token(self, access_token: str) -> bool:
         return self._access_token == access_token
 
+    def has_mcp_url(self, mcp_url: str) -> bool:
+        return self._mcp_url == mcp_url.rstrip("/")
+
     def is_connected(self) -> bool:
         return self._connected
 
-    async def connect(self, access_token: str | None = None) -> None:
+    async def connect(self, access_token: str | None = None, mcp_url: str | None = None) -> None:
         if self._connected:
             return
-        if not settings.glean_mcp_url:
-            raise RuntimeError("GLEAN_MCP_URL not configured")
+
+        url = (mcp_url or settings.glean_mcp_url or "").rstrip("/")
+        if not url:
+            raise RuntimeError("Glean MCP URL not configured")
 
         token = access_token or settings.glean_mcp_token
         if not token:
             raise RuntimeError("No access token — sign in first")
 
         headers = {"Authorization": f"Bearer {token}"}
-        url = settings.glean_mcp_url.rstrip("/")
         logger.info("Connecting to MCP at %s", url)
 
         transport = await self._stack.enter_async_context(
@@ -75,6 +86,7 @@ class GleanMcpClient:
             for tool in result.tools
         ]
         self._access_token = token
+        self._mcp_url = url
         self._connected = True
         logger.info("MCP connected — %d tools", len(self._tools))
 
@@ -85,6 +97,7 @@ class GleanMcpClient:
         self._tools.clear()
         self._connected = False
         self._access_token = None
+        self._mcp_url = None
 
     def resolve_tool(self, preferred: str | None = None) -> str:
         names = {t.name for t in self._tools}
@@ -96,11 +109,15 @@ class GleanMcpClient:
             return self._tools[0].name
         raise RuntimeError("No MCP tools available")
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> ToolCallResult:
         if not self._session:
             raise RuntimeError("MCP not connected")
 
+        logger.info("MCP tool call: %s args=%s", name, json.dumps(arguments))
         result = await self._session.call_tool(name, arguments=arguments)
+        raw = result.model_dump()
+        logger.info("MCP raw response (%s):\n%s", name, json.dumps(raw, indent=2, default=str))
+
         parts: list[str] = []
         for block in result.content:
             if hasattr(block, "text"):
@@ -108,8 +125,10 @@ class GleanMcpClient:
             else:
                 parts.append(str(block))
         if parts:
-            return "\n".join(parts)
-        return json.dumps({"status": "ok", "isError": result.isError})
+            text = "\n".join(parts)
+        else:
+            text = json.dumps({"status": "ok", "isError": result.isError})
+        return ToolCallResult(text=text, raw=raw)
 
     def status(self) -> dict[str, Any]:
         return {
