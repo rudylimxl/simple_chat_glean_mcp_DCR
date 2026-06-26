@@ -2,6 +2,10 @@
 
 A chat UI that looks like a normal assistant but always answers by calling Glean MCP on the backend. No Glean SDK in the browser, no LLM — every question goes straight to Glean's `chat` tool.
 
+Paste your Glean MCP URL on the Sign in page
+![Paste Glean MCP URL](docs/home.png)
+
+The main app has a mock dashboard with always-on Glean assistant on the right panel. Start asking questions right away!
 ![Trading desk dashboard with Glean Assistant chat](docs/screenshot.png)
 
 ## Running it
