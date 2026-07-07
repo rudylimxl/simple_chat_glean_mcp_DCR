@@ -6,9 +6,9 @@
     "node": ">=18"
   },
   "scripts": {
-    "postinstall": "npm install --prefix frontend",
+    "postinstall": "npm install --prefix frontend && npm install --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend",
-    "dev:backend": "sh -c 'cd backend && if [ -x .venv/bin/python ]; then .venv/bin/python main.py; else python3 main.py; fi'",
+    "dev:backend": "npm run dev --prefix backend",
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
     "start": "npm run dev",
     "build": "npm run build --prefix frontend",

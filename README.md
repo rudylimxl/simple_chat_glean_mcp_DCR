@@ -12,17 +12,12 @@ The main app has a mock dashboard with always-on Glean assistant on the right pa
 ## Running it
 
 ```bash
-cd backend && python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # only SESSION_SECRET required
-python main.py
+npm install
+cp backend/.env.example backend/.env   # only SESSION_SECRET required
+npm run dev
 ```
 
-```bash
-npm install && npm run dev
-```
-
-(`npm run dev` and `npm start` run the FastAPI backend and Vite frontend together. Root scripts also delegate to `frontend/` for build/preview. You can still run each side on its own with `npm run dev:backend` or `npm run dev:frontend`.)
+(`npm run dev` and `npm start` run the Node.js backend and Vite frontend together. Root scripts also delegate to `frontend/` and `backend/` for build/preview. You can still run each side on its own with `npm run dev:backend` or `npm run dev:frontend`.)
 
 Open http://localhost:5174 → paste your **Glean MCP URL** on the home page → **Continue to chat** → **Sign in** → ask something.
 
@@ -30,7 +25,7 @@ Your MCP URL comes from Glean Admin → Platform → Glean MCP server (e.g. `htt
 
 ```
 ┌─────────────┐     SSE      ┌──────────────┐    MCP/HTTP    ┌─────────────────┐
-│  React UI   │ ◄──────────► │ FastAPI      │ ◄────────────► │ Glean MCP       │
+│  React UI   │ ◄──────────► │ Node.js      │ ◄────────────► │ Glean MCP       │
 │  (Vite)     │   + cookies  │ + OAuth DCR  │  Bearer token  │ (chat tool)     │
 └─────────────┘              └──────────────┘                └─────────────────┘
 ```
@@ -42,7 +37,7 @@ I wanted the simplest possible demo of "chatbot UI → MCP tool call" without wi
 | Piece            | What it does                                                    |
 | ---------------- | --------------------------------------------------------------- |
 | React frontend   | Home page for MCP URL, chat UI, sign in, read the reply         |
-| FastAPI backend  | OAuth, session management, MCP connection, tool calls           |
+| Node.js backend  | OAuth, session management, MCP connection, tool calls           |
 | Glean MCP        | Actually answers the question via the `chat` tool               |
 
 The frontend doesn't know it's talking to Glean. It just hits `/api/chat` and shows whatever comes back.
@@ -76,7 +71,7 @@ Glean MCP is HTTP, not stdio. The browser shouldn't hold OAuth tokens or speak M
 
 | Concern      | Approach                                                         |
 | ------------ | ---------------------------------------------------------------- |
-| Transport    | Streamable HTTP from the Python MCP SDK                          |
+| Transport    | Streamable HTTP from the MCP TypeScript SDK                      |
 | Auth         | Per-user OAuth tokens, passed as Bearer on MCP requests          |
 | Frontend     | SSE events + session cookies — no MCP protocol in the browser    |
 | Connections  | One MCP session per signed-in user, cached and reused            |
@@ -95,10 +90,10 @@ SSE, not WebSockets — one-directional server → browser, works through Vite's
 
 | Path                                 | Purpose                                      |
 | ------------------------------------ | -------------------------------------------- |
-| `backend/main.py`                    | FastAPI, OAuth routes, SSE chat endpoint     |
-| `backend/oauth_service.py`           | DCR, PKCE, token exchange and refresh        |
-| `backend/mcp_client.py`              | Glean MCP connection with user's bearer token |
-| `backend/chat_handler.py`            | Always calls `chat` (or `search`) each turn  |
+| `backend/src/index.ts`               | Express server, OAuth routes, SSE chat endpoint |
+| `backend/src/oauth-service.ts`       | DCR, PKCE, token exchange and refresh        |
+| `backend/src/mcp-client.ts`          | Glean MCP connection with user's bearer token |
+| `backend/src/chat-handler.ts`        | Always calls `chat` (or `search`) each turn  |
 | `frontend/src/components/Home.tsx`   | MCP URL input                                |
 | `frontend/src/components/Chat.tsx`   | Chat UI + sign-in gate                       |
 
