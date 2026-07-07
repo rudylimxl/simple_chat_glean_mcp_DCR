@@ -7,8 +7,14 @@
   },
   "scripts": {
     "postinstall": "npm install --prefix frontend",
-    "dev": "npm run dev --prefix frontend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "sh -c 'cd backend && if [ -x .venv/bin/python ]; then .venv/bin/python main.py; else python3 main.py; fi'",
+    "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "start": "npm run dev",
     "build": "npm run build --prefix frontend",
     "preview": "npm run preview --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

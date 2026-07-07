@@ -22,7 +22,7 @@ python main.py
 npm install && npm run dev
 ```
 
-(`package.json` lives in `frontend/`; root scripts delegate there. You can also `cd frontend` and run the same commands directly.)
+(`npm run dev` and `npm start` run the FastAPI backend and Vite frontend together. Root scripts also delegate to `frontend/` for build/preview. You can still run each side on its own with `npm run dev:backend` or `npm run dev:frontend`.)
 
 Open http://localhost:5174 → paste your **Glean MCP URL** on the home page → **Continue to chat** → **Sign in** → ask something.
 
