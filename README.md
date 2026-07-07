@@ -19,8 +19,10 @@ python main.py
 ```
 
 ```bash
-cd frontend && npm install && npm run dev
+npm install && npm run dev
 ```
+
+(`package.json` lives in `frontend/`; root scripts delegate there. You can also `cd frontend` and run the same commands directly.)
 
 Open http://localhost:5174 → paste your **Glean MCP URL** on the home page → **Continue to chat** → **Sign in** → ask something.
 
