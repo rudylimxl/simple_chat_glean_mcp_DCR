@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { settings } from "./config.js";
+import { systemFetch } from "./errors.js";
 
 export interface ToolInfo {
   name: string;
@@ -43,6 +44,7 @@ export class GleanMcpClient {
     if (!token) throw new Error("No access token — sign in first");
 
     this.transport = new StreamableHTTPClientTransport(new URL(url), {
+      fetch: systemFetch,
       requestInit: {
         headers: { Authorization: `Bearer ${token}` },
       },

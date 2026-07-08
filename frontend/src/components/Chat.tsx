@@ -20,6 +20,7 @@ interface Health {
   mcp: {
     connected: boolean;
     primary_tool: string | null;
+    error?: string | null;
   };
 }
 
@@ -52,6 +53,13 @@ export default function Chat({ onHome }: ChatProps) {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [loadHealth]);
+
+  useEffect(() => {
+    if (health?.authenticated && health.mcp_configured && !health.mcp.connected) {
+      const timer = window.setInterval(loadHealth, 3000);
+      return () => window.clearInterval(timer);
+    }
+  }, [health?.authenticated, health?.mcp_configured, health?.mcp.connected, loadHealth]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -229,7 +237,9 @@ export default function Chat({ onHome }: ChatProps) {
             Home
           </button>
           {health && !ready && (
-            <span className="offline-badge">Connecting...</span>
+            <span className="offline-badge">
+              {health.authenticated ? "Connecting..." : "Offline"}
+            </span>
           )}
         </div>
       </header>
@@ -300,7 +310,13 @@ export default function Chat({ onHome }: ChatProps) {
               send();
             }
           }}
-          placeholder={ready ? "Message Assistant..." : "Sign in to start chatting..."}
+          placeholder={
+            ready
+              ? "Message Assistant..."
+              : health?.authenticated
+                ? "Connecting to Glean MCP..."
+                : "Sign in to start chatting..."
+          }
           rows={1}
           disabled={loading || !ready}
         />

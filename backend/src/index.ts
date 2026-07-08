@@ -113,15 +113,17 @@ app.get("/api/health", async (req, res) => {
     connected: false,
     tool_count: 0,
     primary_tool: null,
+    error: null,
   };
 
   if (mcpUrl && authenticated) {
     try {
       const access = settings.gleanMcpToken || tokens?.access_token || "";
       const client = await sessionMcp.get(sessionId(req), access, mcpUrl);
-      mcpStatus = client.status();
+      mcpStatus = { ...client.status(), error: null };
     } catch (err) {
       console.error("MCP health check failed", err);
+      mcpStatus.error = formatError(err);
     }
   }
 
