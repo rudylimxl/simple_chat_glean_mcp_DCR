@@ -23,6 +23,54 @@ Open http://localhost:5174 → paste your **Glean MCP URL** on the home page →
 
 Your MCP URL comes from Glean Admin → Platform → Glean MCP server (e.g. `https://your-tenant-be.glean.com/mcp/default`). No need to put it in `.env`.
 
+### Troubleshooting: `No module named 'httpcore'`
+
+That error means the frontend is talking to a **stale Python backend** on port `8001`, not the Node.js backend in this repo. This usually happens if you ran the old Python version before and never stopped it.
+
+1. Stop whatever is on port 8001:
+
+   ```bash
+   lsof -ti :8001 | xargs kill
+   ```
+
+2. Confirm nothing is listening:
+
+   ```bash
+   lsof -i :8001
+   ```
+
+3. Start fresh:
+
+   ```bash
+   npm run dev
+   ```
+
+4. Verify the backend is Node (not uvicorn):
+
+   ```bash
+   curl -I http://localhost:8001/api/health
+   ```
+
+   You should **not** see `server: uvicorn` in the response headers.
+
+### Troubleshooting: `TypeError: fetch failed`
+
+The Node backend couldn't reach your Glean MCP URL over HTTPS. Common causes:
+
+1. **Wrong MCP URL** — copy it exactly from Glean Admin → Platform → Glean MCP server.
+2. **VPN required** — connect to your company VPN, then retry sign-in.
+3. **TLS / proxy issues** — restart with `npm run dev` (the backend uses system certificates). If it still fails, check corporate proxy or SSL inspection settings.
+
+### Troubleshooting: OAuth client does not exist
+
+The backend caches a dynamically registered OAuth client in `backend/.oauth_client.json`. If you see "The requested OAuth 2.0 Client does not exist", delete that file and sign in again:
+
+```bash
+rm backend/.oauth_client.json
+```
+
+Then restart `npm run dev` and click **Sign in** — a fresh client will be registered for your Glean instance.
+
 ```
 ┌─────────────┐     SSE      ┌──────────────┐    MCP/HTTP    ┌─────────────────┐
 │  React UI   │ ◄──────────► │ Node.js      │ ◄────────────► │ Glean MCP       │

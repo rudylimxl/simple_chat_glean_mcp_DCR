@@ -14,6 +14,7 @@ import {
   type OAuthTokens,
   type PendingAuth,
 } from "./oauth-service.js";
+import { formatError } from "./errors.js";
 import { sessionMcp } from "./session-mcp.js";
 
 declare module "express-session" {
@@ -152,7 +153,7 @@ app.get("/api/auth/login", async (req, res) => {
     res.redirect(authorizeUrl);
   } catch (err) {
     console.error("OAuth login start failed", err);
-    res.status(503).json({ detail: String(err) });
+    res.status(503).json({ detail: formatError(err) });
   }
 });
 
@@ -234,7 +235,7 @@ app.post("/api/chat", async (req, res) => {
     mcpClient = await resolveMcpClient(req);
   } catch (err) {
     const status = (err as { status?: number }).status ?? 503;
-    res.status(status).json({ detail: String(err) });
+    res.status(status).json({ detail: formatError(err) });
     return;
   }
 
@@ -252,7 +253,7 @@ app.post("/api/chat", async (req, res) => {
   } catch (err) {
     console.error("Chat error", err);
     res.write(
-      `data: ${JSON.stringify({ type: "error", content: String(err) })}\n\n`,
+      `data: ${JSON.stringify({ type: "error", content: formatError(err) })}\n\n`,
     );
   } finally {
     res.end();
@@ -261,6 +262,20 @@ app.post("/api/chat", async (req, res) => {
 
 const server = app.listen(settings.port, settings.host, () => {
   console.log(`MCP Chatbot backend listening on http://${settings.host}:${settings.port}`);
+});
+
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(
+      `\nPort ${settings.port} is already in use.\n` +
+        "An old Python backend (uvicorn) may still be running from a previous clone.\n" +
+        "Stop it first, then rerun npm run dev:\n" +
+        `  lsof -ti :${settings.port} | xargs kill\n`,
+    );
+  } else {
+    console.error("Backend failed to start:", err);
+  }
+  process.exit(1);
 });
 
 async function shutdown() {

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { settings } from "./config.js";
+import { systemFetch } from "./errors.js";
 
 const TOKEN_EXPIRY_BUFFER_SEC = 300;
 
@@ -83,14 +84,14 @@ async function fetchProtectedResourceMetadata(
             }
           : { headers: { Accept: "application/json" } };
 
-      const resp = await fetch(mcpUrl, init);
+      const resp = await systemFetch(mcpUrl, init);
       if (resp.status !== 401) continue;
 
       const wwwAuth = resp.headers.get("WWW-Authenticate") ?? "";
       const match = /resource_metadata="([^"]+)"/.exec(wwwAuth);
       if (!match) continue;
 
-      const metaResp = await fetch(match[1]);
+      const metaResp = await systemFetch(match[1]);
       if (!metaResp.ok) continue;
       return (await metaResp.json()) as Record<string, unknown>;
     } catch {
@@ -111,14 +112,14 @@ async function discoverOAuthMetadata(
     const servers = prm.authorization_servers;
     if (Array.isArray(servers) && typeof servers[0] === "string") {
       const metaUrl = authorizationServerMetadataUrl(servers[0]);
-      const resp = await fetch(metaUrl);
+      const resp = await systemFetch(metaUrl);
       if (!resp.ok) throw new Error(`OAuth metadata fetch failed: ${resp.status}`);
       return [(await resp.json()) as Record<string, unknown>, resource];
     }
   }
 
   const backend = backendUrlFromMcp(mcpUrl);
-  const resp = await fetch(`${backend}/.well-known/oauth-authorization-server`);
+  const resp = await systemFetch(`${backend}/.well-known/oauth-authorization-server`);
   if (!resp.ok) throw new Error(`OAuth metadata fetch failed: ${resp.status}`);
   const metadata = (await resp.json()) as Record<string, unknown>;
   if (resource == null && prm && typeof prm.resource === "string") {
@@ -127,38 +128,81 @@ async function discoverOAuthMetadata(
   return [metadata, resource];
 }
 
-function loadRegisteredClient(): { client_id: string; redirect_uri: string } | null {
-  if (!existsSync(settings.oauthClientFile)) return null;
-  const data = JSON.parse(readFileSync(settings.oauthClientFile, "utf8")) as {
-    client_id?: string;
-    redirect_uri?: string;
-  };
-  if (data.redirect_uri !== settings.oauthRedirectUri || !data.client_id) return null;
-  return { client_id: data.client_id, redirect_uri: data.redirect_uri };
+function authServerKey(metadata: Record<string, unknown>, mcpUrl: string): string {
+  if (typeof metadata.issuer === "string") return metadata.issuer.replace(/\/$/, "");
+  const registrationEndpoint = metadata.registration_endpoint;
+  if (typeof registrationEndpoint === "string") {
+    return new URL(registrationEndpoint).origin;
+  }
+  return backendUrlFromMcp(mcpUrl);
 }
 
-function saveRegisteredClient(clientId: string): void {
-  writeFileSync(
-    settings.oauthClientFile,
-    JSON.stringify(
-      { client_id: clientId, redirect_uri: settings.oauthRedirectUri },
-      null,
-      2,
-    ),
-  );
+interface StoredClient {
+  client_id: string;
+  redirect_uri: string;
+}
+
+interface ClientStore {
+  clients: Record<string, StoredClient>;
+}
+
+function readClientStore(): ClientStore {
+  if (!existsSync(settings.oauthClientFile)) return { clients: {} };
+  const data = JSON.parse(readFileSync(settings.oauthClientFile, "utf8")) as
+    | ClientStore
+    | StoredClient;
+
+  if ("clients" in data && data.clients && typeof data.clients === "object") {
+    return data;
+  }
+
+  const legacy = data as StoredClient;
+  if (legacy.client_id && legacy.redirect_uri === settings.oauthRedirectUri) {
+    return { clients: {} };
+  }
+  return { clients: {} };
+}
+
+function writeClientStore(store: ClientStore): void {
+  writeFileSync(settings.oauthClientFile, JSON.stringify(store, null, 2));
   chmodSync(settings.oauthClientFile, 0o600);
 }
 
-async function ensureClientRegistration(metadata: Record<string, unknown>): Promise<string> {
-  const stored = loadRegisteredClient();
-  if (stored) return stored.client_id;
+function loadRegisteredClient(serverKey: string): StoredClient | null {
+  const stored = readClientStore().clients[serverKey];
+  if (!stored || stored.redirect_uri !== settings.oauthRedirectUri || !stored.client_id) {
+    return null;
+  }
+  return stored;
+}
 
+function saveRegisteredClient(serverKey: string, clientId: string): void {
+  const store = readClientStore();
+  store.clients[serverKey] = {
+    client_id: clientId,
+    redirect_uri: settings.oauthRedirectUri,
+  };
+  writeClientStore(store);
+}
+
+export function clearRegisteredClient(serverKey?: string): void {
+  if (!existsSync(settings.oauthClientFile)) return;
+  if (!serverKey) {
+    writeClientStore({ clients: {} });
+    return;
+  }
+  const store = readClientStore();
+  delete store.clients[serverKey];
+  writeClientStore(store);
+}
+
+async function registerClient(metadata: Record<string, unknown>, serverKey: string): Promise<string> {
   const registrationEndpoint = metadata.registration_endpoint;
   if (typeof registrationEndpoint !== "string") {
     throw new Error("OAuth metadata missing registration_endpoint");
   }
 
-  const resp = await fetch(registrationEndpoint, {
+  const resp = await systemFetch(registrationEndpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -173,8 +217,18 @@ async function ensureClientRegistration(metadata: Record<string, unknown>): Prom
   const data = (await resp.json()) as { client_id?: string };
   if (!data.client_id) throw new Error("Client registration missing client_id");
 
-  saveRegisteredClient(data.client_id);
+  saveRegisteredClient(serverKey, data.client_id);
   return data.client_id;
+}
+
+async function ensureClientRegistration(
+  metadata: Record<string, unknown>,
+  mcpUrl: string,
+): Promise<string> {
+  const serverKey = authServerKey(metadata, mcpUrl);
+  const stored = loadRegisteredClient(serverKey);
+  if (stored) return stored.client_id;
+  return registerClient(metadata, serverKey);
 }
 
 function buildAuthorizeUrl(
@@ -206,7 +260,7 @@ export async function startLogin(
   mcpUrl: string,
 ): Promise<[string, PendingAuth]> {
   const [metadata, resource] = await discoverOAuthMetadata(mcpUrl);
-  const clientId = await ensureClientRegistration(metadata);
+  const clientId = await ensureClientRegistration(metadata, mcpUrl);
   const [codeVerifier, codeChallenge] = generatePkce();
   const state = randomBytes(24).toString("base64url");
   const redirectUri = settings.oauthRedirectUri;
@@ -248,7 +302,7 @@ export async function finishLogin(
     code_verifier: pending.code_verifier,
   });
 
-  const resp = await fetch(tokenEndpoint, { method: "POST", body });
+  const resp = await systemFetch(tokenEndpoint, { method: "POST", body });
   if (!resp.ok) throw new Error(`Token exchange failed: ${resp.status}`);
   const data = (await resp.json()) as {
     access_token: string;
@@ -285,7 +339,7 @@ export async function refreshTokens(
     client_id: tokens.client_id,
   });
 
-  const resp = await fetch(tokenEndpoint, { method: "POST", body });
+  const resp = await systemFetch(tokenEndpoint, { method: "POST", body });
   if (!resp.ok) throw new Error(`Token refresh failed: ${resp.status}`);
   const data = (await resp.json()) as {
     access_token: string;
