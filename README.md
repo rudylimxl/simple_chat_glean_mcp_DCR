@@ -10,6 +10,7 @@ The main app has a mock dashboard with always-on Glean assistant on the right pa
 ![Trading desk dashboard with Glean Assistant chat](docs/screenshot.png)
 
 Full example video of installing and modifying
+
 [![Watch the video](https://drive.google.com/thumbnail?id=1lWphHG6qCYGjBM2s1xtVRLibdyvGHV3o)](https://drive.google.com/file/d/1lWphHG6qCYGjBM2s1xtVRLibdyvGHV3o/view)
 
 ## Running it
